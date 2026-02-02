@@ -12,6 +12,8 @@ export default function Dashboard(){
   const [rows, setRows] = useState([])
   const [columns, setColumns] = useState([])
   const [newColumnName, setNewColumnName] = useState('')
+  const [showNewSheetDialog, setShowNewSheetDialog] = useState(false)
+  const [newSheetName, setNewSheetName] = useState('')
   const [showColumnDialog, setShowColumnDialog] = useState(false)
   const [loading, setLoading] = useState(false)
 
@@ -67,13 +69,12 @@ export default function Dashboard(){
   }
 
   async function createNewSheet() {
-    const name = prompt('Sheet name:')
-    if (!name) return
+    if (!newSheetName.trim()) return
     
     setLoading(true)
     const { data, error } = await supabase
       .from('sheets')
-      .insert([{ user_id: user.id, name, is_public: false }])
+      .insert([{ user_id: user.id, name: newSheetName, is_public: false }])
       .select()
     
     if (!error && data) {
@@ -83,10 +84,12 @@ export default function Dashboard(){
         defaultCols.map((col, i) => ({
           sheet_id: data[0].id,
           name: col,
-          order: i
+          "order": i
         }))
       )
       loadSheets(user.id)
+      setShowNewSheetDialog(false)
+      setNewSheetName('')
     }
     setLoading(false)
   }
@@ -183,10 +186,10 @@ export default function Dashboard(){
   return (
     <div className="min-h-screen bg-gray-900 text-white">
       {/* Header */}
-      <nav className="bg-gray-800 border-b border-gray-700 py-4">
-        <div className="container flex justify-between items-center">
+      <nav className="bg-gray-800 border-b border-gray-700 py-4 sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex justify-between items-center">
           <div className="flex items-center space-x-4">
-            <button onClick={() => router.back()} className="text-gray-400 hover:text-white">←</button>
+            <button onClick={() => router.back()} className="text-gray-400 hover:text-white text-xl">←</button>
             {editingName && selectedSheet ? (
               <input
                 value={sheetName}
@@ -199,13 +202,13 @@ export default function Dashboard(){
             ) : (
               <h1 
                 onClick={() => setEditingName(true)}
-                className="text-2xl font-bold cursor-pointer hover:text-gray-300"
+                className="text-xl sm:text-2xl font-bold cursor-pointer hover:text-gray-300 truncate"
               >
                 {sheetName || 'Untitled'} ✎
               </h1>
             )}
           </div>
-          <button onClick={logout} className="text-sm px-3 py-1 bg-red-600 rounded hover:bg-red-700">
+          <button onClick={logout} className="text-sm px-3 py-1 bg-red-600 rounded hover:bg-red-700 whitespace-nowrap">
             Logout
           </button>
         </div>
@@ -213,63 +216,89 @@ export default function Dashboard(){
 
       {/* Toolbar */}
       {selectedSheet && (
-        <div className="bg-gray-800 border-b border-gray-700 py-3">
-          <div className="container flex items-center space-x-3 overflow-x-auto">
+        <div className="bg-gray-800 border-b border-gray-700 py-3 sticky top-16 z-30">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex items-center space-x-2 sm:space-x-3 overflow-x-auto">
             <button 
               onClick={addRow}
-              className="px-4 py-2 bg-blue-600 rounded hover:bg-blue-700 text-sm font-semibold"
+              className="px-3 sm:px-4 py-2 bg-blue-600 rounded hover:bg-blue-700 text-sm font-semibold whitespace-nowrap"
             >
-              + New Row
+              + Row
             </button>
             <button 
               onClick={() => setShowColumnDialog(true)}
-              className="px-4 py-2 bg-blue-600 rounded hover:bg-blue-700 text-sm font-semibold"
+              className="px-3 sm:px-4 py-2 bg-blue-600 rounded hover:bg-blue-700 text-sm font-semibold whitespace-nowrap"
             >
-              Manage Columns
-            </button>
-            <button 
-              onClick={() => alert('Share feature coming soon')}
-              className="px-4 py-2 bg-gray-700 rounded hover:bg-gray-600 text-sm"
-            >
-              🔗 Share
+              Columns
             </button>
             <button 
               onClick={deleteSheet}
-              className="px-4 py-2 bg-red-600 rounded hover:bg-red-700 text-sm font-semibold ml-auto"
+              className="px-3 sm:px-4 py-2 bg-red-600 rounded hover:bg-red-700 text-sm font-semibold ml-auto whitespace-nowrap"
             >
-              Delete Sheet
+              Delete
             </button>
           </div>
         </div>
       )}
 
       {/* Main Content */}
-      <div className="pl-64 py-6">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {!selectedSheet ? (
           <div className="text-center py-12">
             <p className="text-gray-400 mb-4">No sheets yet</p>
             <button
-              onClick={createNewSheet}
+              onClick={() => setShowNewSheetDialog(true)}
               className="px-6 py-3 bg-green-600 rounded hover:bg-green-700 font-semibold"
             >
               Create First Sheet
             </button>
           </div>
         ) : (
-          <div className="px-6 space-y-4">
+          <div className="space-y-4">
+            {/* New Sheet Dialog */}
+            {showNewSheetDialog && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                <div className="bg-gray-800 rounded p-6 max-w-md w-full">
+                  <h3 className="text-lg font-semibold mb-4">New Sheet</h3>
+                  <input
+                    value={newSheetName}
+                    onChange={e => setNewSheetName(e.target.value)}
+                    onKeyPress={e => e.key === 'Enter' && createNewSheet()}
+                    placeholder="Sheet name"
+                    autoFocus
+                    className="w-full bg-gray-700 px-3 py-2 rounded text-white placeholder-gray-400 mb-4"
+                  />
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={createNewSheet}
+                      disabled={loading || !newSheetName.trim()}
+                      className="flex-1 px-3 py-2 bg-green-600 rounded hover:bg-green-700 text-sm font-semibold disabled:bg-gray-600"
+                    >
+                      {loading ? 'Creating...' : 'Create'}
+                    </button>
+                    <button
+                      onClick={() => setShowNewSheetDialog(false)}
+                      className="flex-1 px-3 py-2 bg-gray-600 rounded hover:bg-gray-500 text-sm"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Column Manager Dialog */}
             {showColumnDialog && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-gray-800 rounded p-6 max-w-md w-full">
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                <div className="bg-gray-800 rounded p-6 max-w-md w-full max-h-96 overflow-y-auto">
                   <h3 className="text-lg font-semibold mb-4">Manage Columns</h3>
                   
-                  <div className="space-y-2 mb-4 max-h-64 overflow-y-auto">
+                  <div className="space-y-2 mb-4">
                     {columns.map(col => (
                       <div key={col.id} className="flex items-center justify-between bg-gray-700 p-2 rounded">
-                        <span>{col.name}</span>
+                        <span className="truncate">{col.name}</span>
                         <button
                           onClick={() => deleteColumn(col.id)}
-                          className="text-red-400 hover:text-red-300 text-sm"
+                          className="text-red-400 hover:text-red-300 text-sm ml-2 whitespace-nowrap"
                         >
                           Delete
                         </button>
@@ -281,15 +310,17 @@ export default function Dashboard(){
                     <input
                       value={newColumnName}
                       onChange={e => setNewColumnName(e.target.value)}
+                      onKeyPress={e => e.key === 'Enter' && addColumn()}
                       placeholder="New column name"
                       className="w-full bg-gray-700 px-3 py-2 rounded text-white placeholder-gray-400"
                     />
                     <div className="flex space-x-2">
                       <button
                         onClick={addColumn}
-                        className="flex-1 px-3 py-2 bg-green-600 rounded hover:bg-green-700 text-sm font-semibold"
+                        disabled={!newColumnName.trim()}
+                        className="flex-1 px-3 py-2 bg-green-600 rounded hover:bg-green-700 text-sm font-semibold disabled:bg-gray-600"
                       >
-                        Add Column
+                        Add
                       </button>
                       <button
                         onClick={() => setShowColumnDialog(false)}
@@ -303,24 +334,24 @@ export default function Dashboard(){
               </div>
             )}
 
-            {/* Table */}
+            {/* Table - Responsive */}
             <div className="overflow-x-auto border border-gray-700 rounded">
-              <table className="w-full border-collapse bg-gray-800">
+              <table className="w-full border-collapse bg-gray-800 text-sm">
                 <thead>
                   <tr className="bg-gray-700 border-b border-gray-600">
-                    <th className="p-2 text-left text-sm font-semibold w-12">#</th>
+                    <th className="p-2 text-left font-semibold w-12">#</th>
                     {columns.map(col => (
-                      <th key={col.id} className="p-2 text-left text-sm font-semibold border-l border-gray-600 min-w-40">
+                      <th key={col.id} className="p-2 text-left font-semibold border-l border-gray-600 min-w-32">
                         {col.name}
                       </th>
                     ))}
-                    <th className="p-2 text-center text-sm w-12 border-l border-gray-600">Action</th>
+                    <th className="p-2 text-center w-12 border-l border-gray-600">✕</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((row, idx) => (
                     <tr key={row.id} className="border-b border-gray-700 hover:bg-gray-700">
-                      <td className="p-2 text-sm text-gray-400">{idx + 1}</td>
+                      <td className="p-2 text-gray-400">{idx + 1}</td>
                       {columns.map(col => (
                         <td key={col.id} className="p-2 border-l border-gray-700">
                           <input
@@ -348,7 +379,7 @@ export default function Dashboard(){
       </div>
 
       {/* Sidebar - Sheet List */}
-      <div className="fixed left-0 top-0 h-screen w-64 bg-gray-900 border-r border-gray-700 p-4 overflow-y-auto">
+      <div className="fixed left-0 top-0 h-screen w-64 bg-gray-900 border-r border-gray-700 p-4 overflow-y-auto hidden md:block">
         <h2 className="font-semibold mb-4 mt-20">Your Sheets</h2>
         <div className="space-y-2 mb-4">
           {sheets.map(sheet => (
@@ -366,13 +397,44 @@ export default function Dashboard(){
           ))}
         </div>
         <button
-          onClick={createNewSheet}
+          onClick={() => setShowNewSheetDialog(true)}
           disabled={loading}
           className="w-full px-3 py-2 bg-green-600 rounded hover:bg-green-700 text-sm font-semibold disabled:bg-gray-600"
         >
           + New Sheet
         </button>
       </div>
+
+      {/* Mobile Sheet Selector */}
+      <div className="fixed bottom-0 left-0 right-0 bg-gray-800 border-t border-gray-700 p-4 md:hidden z-20">
+        <select
+          value={selectedSheet?.id || ''}
+          onChange={e => {
+            const sheet = sheets.find(s => s.id === e.target.value)
+            if (sheet) selectSheet(sheet)
+          }}
+          className="w-full bg-gray-700 text-white p-2 rounded"
+        >
+          <option value="">Select Sheet...</option>
+          {sheets.map(sheet => (
+            <option key={sheet.id} value={sheet.id}>{sheet.name}</option>
+          ))}
+        </select>
+      </div>
+
+      <style jsx>{`
+        .md\:block {
+          display: block;
+        }
+        @media (max-width: 768px) {
+          .md\:block {
+            display: none;
+          }
+          .md\:hidden {
+            display: block;
+          }
+        }
+      `}</style>
     </div>
   )
 }
