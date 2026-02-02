@@ -16,6 +16,9 @@ export default function Dashboard(){
   const [newSheetName, setNewSheetName] = useState('')
   const [showColumnDialog, setShowColumnDialog] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [activeTab, setActiveTab] = useState('sheets')
+  const [searchTerm, setSearchTerm] = useState('')
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(null)
 
   useEffect(() => {
     checkAuth()
@@ -23,7 +26,7 @@ export default function Dashboard(){
 
   async function checkAuth() {
     const { data } = await supabase.auth.getSession()
-    if (!data.session) {
+    if (!data?.session) {
       router.push('/login')
     } else {
       setUser(data.session.user)
@@ -37,7 +40,7 @@ export default function Dashboard(){
       .select('*')
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
-    
+
     if (error) console.error(error)
     else {
       setSheets(data || [])
@@ -50,7 +53,7 @@ export default function Dashboard(){
   async function selectSheet(sheet) {
     setSelectedSheet(sheet)
     setSheetName(sheet.name)
-    
+
     // Load columns
     const { data: colData } = await supabase
       .from('sheet_columns')
@@ -183,8 +186,6 @@ export default function Dashboard(){
     router.push('/')
   }
 
-  const [activeTab, setActiveTab] = useState('sheets')
-  
   return (
     <div className="min-h-screen bg-slate-950 text-white">
       {/* Header */}
@@ -325,14 +326,15 @@ export default function Dashboard(){
 
         {/* Sheet Editor - When selected */}
         {selectedSheet && activeTab === 'sheets' && (
-          <div className="fixed inset-0 bg-slate-950 bg-opacity-95 backdrop-blur z-40 flex flex-col overflow-hidden">
+          <div className="min-h-screen bg-slate-950">
             {/* Editor Header */}
-            <div className="bg-slate-900 border-b border-slate-800 py-4 px-6">
+            <div className="bg-slate-900 border-b border-slate-800 py-4 px-6 sticky top-0 z-30">
               <div className="flex justify-between items-center mb-4">
                 <div className="flex items-center space-x-4">
                   <button
                     onClick={() => setSelectedSheet(null)}
-                    className="text-slate-400 hover:text-white text-2xl"
+                    className="text-slate-400 hover:text-white text-2xl p-2 rounded hover:bg-slate-800"
+                    title="Back"
                   >
                     ←
                   </button>
@@ -348,50 +350,160 @@ export default function Dashboard(){
                   ) : (
                     <h1
                       onClick={() => setEditingName(true)}
-                      className="text-2xl font-bold cursor-pointer hover:text-slate-300"
+                      className="text-2xl font-bold cursor-pointer hover:text-slate-300 flex items-center space-x-2"
                     >
-                      {sheetName || 'Untitled'} ✎
+                      <span>{sheetName || 'Untitled'}</span>
+                      <span className="text-base">✎</span>
                     </h1>
                   )}
                 </div>
-                <button
-                  onClick={() => setSelectedSheet(null)}
-                  className="text-2xl text-slate-400 hover:text-white"
-                >
-                  ✕
-                </button>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={async () => {
+                      if (!selectedSheet) return
+                      await supabase.from('sheets').update({ is_public: true }).eq('id', selectedSheet.id)
+                      const link = `${window.location.origin}/share?sheetId=${selectedSheet.id}`
+                      try { await navigator.clipboard.writeText(link) } catch (e) {}
+                      alert('Public link copied!')
+                    }}
+                    className="px-3 py-2 bg-slate-800 border border-slate-700 rounded hover:bg-slate-700 text-sm flex items-center space-x-2"
+                  >
+                    <span>🔗</span>
+                    <span>Create Public Link</span>
+                  </button>
+                  <button
+                    onClick={() => router.push(`/share?sheetId=${selectedSheet?.id}`)}
+                    className="px-3 py-2 bg-slate-800 border border-slate-700 rounded hover:bg-slate-700 text-sm flex items-center space-x-2"
+                  >
+                    <span>👥</span>
+                    <span>Manage Access</span>
+                  </button>
+                  <button
+                    onClick={() => setShowDeleteConfirm('sheet')}
+                    className="px-3 py-2 bg-red-600 rounded hover:bg-red-700 text-sm text-white"
+                  >
+                    🗑️ Delete Sheet
+                  </button>
+                </div>
               </div>
 
-              {/* Editor Toolbar */}
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={addRow}
-                  className="px-4 py-2 bg-blue-600 rounded hover:bg-blue-700 text-sm font-semibold"
-                >
-                  + Row
-                </button>
+              {/* Toolbar - Row 2 */}
+              <div className="flex flex-wrap items-center gap-3">
                 <button
                   onClick={() => setShowColumnDialog(true)}
-                  className="px-4 py-2 bg-blue-600 rounded hover:bg-blue-700 text-sm font-semibold"
+                  className="px-4 py-2 bg-blue-600 rounded hover:bg-blue-700 text-sm font-semibold flex items-center space-x-2"
                 >
-                  Columns
+                  <span>⚙️</span>
+                  <span>Manage Columns</span>
                 </button>
+
+                <button
+                  onClick={addRow}
+                  className="px-4 py-2 bg-slate-800 border border-slate-700 rounded hover:bg-slate-700 text-sm"
+                >
+                  + New Row
+                </button>
+
                 <button
                   onClick={async () => {
                     if (!selectedSheet) return
-                    if (!confirm('Delete this sheet?')) return
-                    await supabase.from('sheets').delete().eq('id', selectedSheet.id)
-                    setSelectedSheet(null)
-                    loadSheets(user.id)
+                    const maxOrder = columns.length > 0 ? Math.max(...columns.map(c => c.order || 0)) : 0
+                    const { data } = await supabase.from('sheet_columns').insert([{ sheet_id: selectedSheet.id, name: 'Status', "order": maxOrder + 1 }]).select()
+                    if (data && data[0]) {
+                      const colId = data[0].id
+                      for (const r of rows) {
+                        const updated = { ...r.data, [`col_${colId}`]: 'Done' }
+                        await supabase.from('sheet_rows').update({ data: updated }).eq('id', r.id)
+                      }
+                      selectSheet(selectedSheet)
+                    }
                   }}
-                  className="px-4 py-2 bg-red-600 rounded hover:bg-red-700 text-sm font-semibold ml-auto"
+                  className="px-4 py-2 bg-slate-800 border border-slate-700 rounded hover:bg-slate-700 text-sm"
                 >
-                  Delete Sheet
+                  Add Status Column
                 </button>
+
+                <button
+                  onClick={async () => {
+                    await updateSheetName()
+                    selectSheet(selectedSheet)
+                  }}
+                  className="px-4 py-2 bg-slate-800 border border-slate-700 rounded hover:bg-slate-700 text-sm"
+                >
+                  Save
+                </button>
+
+                <div className="ml-auto px-3 py-2 bg-emerald-100 text-emerald-800 rounded text-sm font-medium">
+                  Auto-save: On
+                </div>
+
+                <button
+                  onClick={async () => {
+                    const header = ['#', ...columns.map(c => c.name)].join(',')
+                    const csvRows = [header]
+                    rows.forEach((r, idx) => {
+                      const values = columns.map(c => {
+                        const val = (r.data?.[`col_${c.id}`] || '').toString()
+                        return val.includes(',') ? `"${val.replace(/"/g, '""')}"` : val
+                      })
+                      csvRows.push([idx + 1, ...values].join(','))
+                    })
+                    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' })
+                    const url = URL.createObjectURL(blob)
+                    const a = document.createElement('a')
+                    a.href = url
+                    a.download = `${selectedSheet.name || 'sheet'}.csv`
+                    document.body.appendChild(a)
+                    a.click()
+                    a.remove()
+                    URL.revokeObjectURL(url)
+                  }}
+                  className="px-3 py-2 bg-slate-800 border border-slate-700 rounded hover:bg-slate-700 text-sm"
+                >
+                  Export to Excel
+                </button>
+
+                <label className="px-3 py-2 bg-slate-800 border border-slate-700 rounded hover:bg-slate-700 text-sm cursor-pointer">
+                  Import Excel
+                  <input
+                    type="file"
+                    accept=".csv,.xls,.xlsx"
+                    onChange={async e => {
+                      const file = e.target.files?.[0]
+                      if (!file || !selectedSheet) return
+                      const text = await file.text()
+                      const lines = text.split(/\r?\n/).filter(Boolean)
+                      if (lines.length <= 1) return
+                      const cols = columns
+                      for (let i = 1; i < lines.length; i++) {
+                        const values = lines[i].split(',').slice(1)
+                        const dataObj = {}
+                        for (let j = 0; j < cols.length; j++) {
+                          dataObj[`col_${cols[j].id}`] = values[j] ? values[j].replace(/^"|"$/g, '') : ''
+                        }
+                        const maxRow = rows.length > 0 ? Math.max(...rows.map(r => r.row_number)) : 0
+                        await supabase.from('sheet_rows').insert([{ sheet_id: selectedSheet.id, row_number: maxRow + 1 + (i - 1), data: dataObj }])
+                      }
+                      selectSheet(selectedSheet)
+                    }}
+                    className="hidden"
+                  />
+                </label>
               </div>
             </div>
 
-            {/* Column Manager Dialog */}
+            {/* Search Bar */}
+            <div className="bg-slate-900 border-b border-slate-800 px-6 py-3">
+              <input
+                type="text"
+                placeholder="Search across all fields..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="w-full bg-slate-800 text-white px-4 py-2 rounded border border-slate-700 placeholder-slate-400 outline-none focus:ring-1 focus:ring-blue-500"
+              />
+            </div>
+
+            {/* Manage Columns Dialog */}
             {showColumnDialog && (
               <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
                 <div className="bg-slate-800 rounded-lg p-6 max-w-md w-full max-h-96 overflow-y-auto border border-slate-700">
@@ -402,8 +514,11 @@ export default function Dashboard(){
                       <div key={col.id} className="flex items-center justify-between bg-slate-700 p-2 rounded">
                         <span className="truncate">{col.name}</span>
                         <button
-                          onClick={() => deleteColumn(col.id)}
-                          className="text-red-400 hover:text-red-300 text-sm ml-2 whitespace-nowrap"
+                          onClick={() => {
+                            deleteColumn(col.id)
+                            setShowColumnDialog(false)
+                          }}
+                          className="text-red-400 hover:text-red-300 text-sm ml-2"
                         >
                           Delete
                         </button>
@@ -439,46 +554,88 @@ export default function Dashboard(){
               </div>
             )}
 
+            {/* Delete Confirmation Dialog */}
+            {showDeleteConfirm && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                <div className="bg-slate-800 rounded-lg p-6 max-w-sm w-full border border-slate-700">
+                  <h3 className="text-lg font-semibold mb-4">Confirm Delete</h3>
+                  <p className="text-slate-400 mb-6">Are you sure? This action cannot be undone.</p>
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={async () => {
+                        if (!selectedSheet) return
+                        await supabase.from('sheets').delete().eq('id', selectedSheet.id)
+                        setSelectedSheet(null)
+                        loadSheets(user.id)
+                        setShowDeleteConfirm(null)
+                      }}
+                      className="flex-1 px-4 py-2 bg-red-600 rounded hover:bg-red-700 text-sm font-semibold"
+                    >
+                      Delete
+                    </button>
+                    <button
+                      onClick={() => setShowDeleteConfirm(null)}
+                      className="flex-1 px-4 py-2 bg-slate-600 rounded hover:bg-slate-500 text-sm"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Table */}
-            <div className="flex-1 overflow-auto px-6 py-4">
-              <div className="border border-slate-700 rounded overflow-hidden">
-                <table className="w-full border-collapse bg-slate-800 text-sm">
-                  <thead>
-                    <tr className="bg-slate-700 border-b border-slate-600">
-                      <th className="p-3 text-left font-semibold w-12">#</th>
-                      {columns.map(col => (
-                        <th key={col.id} className="p-3 text-left font-semibold border-l border-slate-600 min-w-40">
-                          {col.name}
-                        </th>
-                      ))}
-                      <th className="p-3 text-center w-12 border-l border-slate-600">✕</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((row, idx) => (
-                      <tr key={row.id} className="border-b border-slate-700 hover:bg-slate-700">
-                        <td className="p-3 text-slate-400">{idx + 1}</td>
+            <div className="px-6 py-4">
+              <div className="border border-slate-700 rounded overflow-hidden bg-slate-800">
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse text-sm">
+                    <thead>
+                      <tr className="bg-slate-700 border-b border-slate-600">
+                        <th className="p-3 text-left font-semibold w-12 text-white">#</th>
                         {columns.map(col => (
-                          <td key={col.id} className="p-3 border-l border-slate-700">
-                            <input
-                              value={row.data?.[`col_${col.id}`] || ''}
-                              onChange={e => updateCell(row.id, col.id, e.target.value)}
-                              className="w-full bg-slate-700 text-white text-sm p-2 rounded border-0 outline-none focus:ring-1 focus:ring-blue-500"
-                            />
-                          </td>
+                          <th key={col.id} className="p-3 text-left font-semibold border-l border-slate-600 min-w-48 text-white">
+                            <div className="flex items-center justify-between">
+                              <span>{col.name}</span>
+                              <span className="text-slate-400">⬍</span>
+                            </div>
+                          </th>
                         ))}
-                        <td className="p-3 text-center border-l border-slate-700">
-                          <button
-                            onClick={() => deleteRow(row.id)}
-                            className="text-red-400 hover:text-red-300 text-sm font-semibold"
-                          >
-                            ✕
-                          </button>
-                        </td>
+                        <th className="p-3 text-center w-12 border-l border-slate-600 text-white">✕</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {rows.map((row, idx) => {
+                        const matches = !searchTerm || columns.some(col => 
+                          (row.data?.[`col_${col.id}`] || '').toString().toLowerCase().includes(searchTerm.toLowerCase())
+                        )
+                        if (!matches) return null
+                        
+                        return (
+                          <tr key={row.id} className="border-b border-slate-700 hover:bg-slate-700">
+                            <td className="p-3 text-slate-400">{idx + 1}</td>
+                            {columns.map(col => (
+                              <td key={col.id} className="p-3 border-l border-slate-700">
+                                <input
+                                  value={row.data?.[`col_${col.id}`] || ''}
+                                  onChange={e => updateCell(row.id, col.id, e.target.value)}
+                                  className="w-full bg-slate-800 text-white text-sm p-2 rounded border border-slate-600 outline-none focus:ring-1 focus:ring-blue-500"
+                                />
+                              </td>
+                            ))}
+                            <td className="p-3 text-center border-l border-slate-700">
+                              <button
+                                onClick={() => deleteRow(row.id)}
+                                className="text-red-400 hover:text-red-300 text-sm font-semibold"
+                              >
+                                ✕
+                              </button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </div>
