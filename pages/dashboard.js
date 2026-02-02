@@ -66,12 +66,15 @@ export default function Dashboard(){
       <nav className="bg-white shadow-sm py-4">
         <div className="container flex justify-between items-center">
           <h1 className="font-bold text-lg">Dashboard</h1>
-          <button 
-            onClick={logout}
-            className="px-4 py-2 bg-red-600 text-white text-sm rounded"
-          >
-            Logout
-          </button>
+          <div className="space-x-3">
+            <a href="/share" className="text-sm text-blue-600 font-semibold">Share & Permissions</a>
+            <button 
+              onClick={logout}
+              className="px-4 py-2 bg-red-600 text-white text-sm rounded"
+            >
+              Logout
+            </button>
+          </div>
         </div>
       </nav>
 

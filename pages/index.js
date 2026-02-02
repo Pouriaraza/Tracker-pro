@@ -6,8 +6,9 @@ export default function Home(){
     <main>
       <nav className="py-4 bg-white shadow-sm">
         <div className="container flex justify-between items-center">
-          <div className="font-bold">Site Tracker</div>
+          <div className="font-bold text-lg">Site Tracker</div>
           <div className="space-x-4">
+            <a href="/dashboard" className="text-sm font-semibold text-blue-600">Dashboard</a>
             <a href="/login" className="text-sm">Login</a>
             <a href="/signup" className="text-sm">Sign Up</a>
           </div>
