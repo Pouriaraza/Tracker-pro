@@ -18,7 +18,7 @@ CREATE TABLE sheet_columns (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   sheet_id UUID NOT NULL REFERENCES sheets(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
-  order INTEGER NOT NULL DEFAULT 0,
+  "order" INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMP DEFAULT now()
 );
 

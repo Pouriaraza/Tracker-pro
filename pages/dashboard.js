@@ -54,7 +54,7 @@ export default function Dashboard(){
       .from('sheet_columns')
       .select('*')
       .eq('sheet_id', sheet.id)
-      .order('order', { ascending: true })
+      .order('"order"', { ascending: true })
     setColumns(colData || [])
 
     // Load rows
@@ -113,7 +113,7 @@ export default function Dashboard(){
       .insert([{
         sheet_id: selectedSheet.id,
         name: newColumnName,
-        order: maxOrder + 1
+        "order": maxOrder + 1
       }])
     
     setNewColumnName('')
